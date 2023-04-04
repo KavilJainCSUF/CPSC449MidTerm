@@ -1,5 +1,17 @@
 # Job Board Application
-Job Board is a web-based platform that connects employers with job seekers.
+Job Board is a platform that connects employers with job seekers.
+
+## Team Members
+1. Kavil Jain
+2. Zeel Trivedi
+3. Labdhi Shah
+
+## Resources Used
+1. Python
+2. Flask
+3. MYSQL
+4. SWAGGER
+
 ## STEPS TO SETUP THE PROJECT
 
 1. Clone the repository.
