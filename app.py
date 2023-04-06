@@ -1,11 +1,16 @@
+from datetime import timedelta
 import re
-from flask import Flask, render_template, request
+from flask import Flask, redirect, render_template, request, session, url_for
 # from flask_restful import Api, Resource
 # from flask_swagger import swagger
 # from flask_swagger_ui import get_swaggerui_blueprint
 import pymysql
 
 app = Flask(__name__)
+
+app.secret_key = 'midterm'
+
+app.permanent_session_lifetime = timedelta(seconds=100)
 
 conn = pymysql.connect(
     host='localhost',
@@ -24,10 +29,11 @@ def index():
     return render_template("index.html")
 
 
-@app.route('/user/login', methods=['POST'])
+@app.route('/user/login', methods=['GET','POST'])
 def user_login():
     """User Login"""
-    if 'email' in request.form and 'password' in request.form:
+    msg=''
+    if request.method=='POST' and 'email' in request.form and 'password' in request.form:
         email = request.form['email']
         password = request.form['password']
         cur.execute(
@@ -35,11 +41,24 @@ def user_login():
         conn.commit()
         user = cur.fetchone()
         if user:
+            session.permanent = True
+            session['loggedin'] = True
+            session['id'] = user['id']
+            session['username'] = user['name']
             msg = 'Welcome {0} - {1} !'.format(user['name'], user['id'])
             return render_template('index.html', msg=msg)
         else:
             msg = 'Incorrect email or password!'
     return render_template('login.html', msg=msg)
+
+
+@app.route('/user/logout')
+def user_logout():
+    """User Logout"""
+    session.pop('loggedin', None)
+    session.pop('id', None)
+    session.pop('username', None)
+    return redirect(url_for('user_login'))
 
 
 @app.route('/user/register', methods=['POST'])
