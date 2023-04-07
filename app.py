@@ -1,6 +1,6 @@
 from datetime import timedelta
 import re
-from flask import Flask, redirect, render_template, request, session, url_for
+from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
 # from flask_restful import Api, Resource
 # from flask_swagger import swagger
 # from flask_swagger_ui import get_swaggerui_blueprint
@@ -45,11 +45,12 @@ def user_login():
             session['loggedin'] = True
             session['id'] = user['id']
             session['username'] = user['name']
+            session['isEmployer'] = user['is_employer']
             msg = 'Welcome {0} - {1} !'.format(user['name'], user['id'])
             return render_template('index.html', msg=msg)
         else:
             msg = 'Incorrect email or password!'
-    return render_template('login.html', msg=msg)
+    return render_template('login.html', msg=msg) 
 
 
 @app.route('/user/logout')
@@ -70,7 +71,7 @@ def register_user():
         email = request.form['email']
         password = request.form['password']
         is_employer = request.form['is_employer']
-        cur.execute('SELECT * from users WHERE name = %s', name)
+        cur.execute('SELECT * from users WHERE email = %s', email)
         user = cur.fetchone()
         conn.commit()
         if user:
@@ -92,6 +93,47 @@ def register_user():
     elif request.method == 'POST':
         msg = 'Please fill out the form!'
     return render_template('register.html', msg=msg)
+
+@app.route('/job_listings')
+def get_job_listings():
+    """List of available Jobs"""
+    try:
+        cur.execute("SELECT * FROM JobListing")
+        jobs = cur.fetchall()
+        if jobs:
+            return jsonify(jobs)
+        else:
+            abort(404)
+    except Exception as e:
+        abort(500, e)
+
+@app.route('/create_jobs', methods=['POST'])
+def create_jobs():
+    """Here Employers create Jobs"""
+    msg=''
+    try:
+        if session['isEmployer'] == 1:
+            employerId = session['id']
+            if 'company_name' in request.form and 'company_description' in request.form and 'title' in request.form and 'title_description' in request.form and 'location' in request.form and 'salary' in request.form:
+                company_name = request.form['company_name']
+                company_description = request.form['company_description']
+                title = request.form['title']
+                title_description = request.form['title_description']
+                location = request.form['location']
+                salary = request.form['salary']
+                employer_id = employerId
+                cur.execute('INSERT INTO joblisting VALUES (NULL, %s, %s, %s, %s, %s, %s, %s)',(company_name, company_description, title, title_description, location, salary, employer_id))
+                conn.commit()
+                msg = 'Job is Successfully added'
+                return render_template('index.html', msg = msg)
+            else:
+                msg = 'Please fill out the form !'
+                abort(410, msg)
+        else:
+            msg = 'You are not allowed to add a Job'
+            abort(420, msg)
+    except Exception as e:
+        abort(500, e)
 
 
 if __name__ == "__main__":
