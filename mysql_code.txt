@@ -26,8 +26,11 @@ CREATE TABLE JobApplication (
     user_id INT NOT NULL,
     job_listing_id INT NOT NULL,
     cover_letter TEXT,
-    resume VARCHAR(1000),
+    resume TEXT,
     PRIMARY KEY (id),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (job_listing_id) REFERENCES JobListing(id)
 );
+
+
+ALTER TABLE jobapplication MODIFY resume TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

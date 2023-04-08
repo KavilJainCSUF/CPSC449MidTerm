@@ -117,7 +117,8 @@ def create_jobs():
             if 'company_name' in request.form and 'company_description' in request.form and 'title' in request.form and 'title_description' in request.form and 'location' in request.form and 'salary' in request.form:
                 company_name = request.form['company_name']
                 company_description = request.form['company_description']
-                title = request.form['title']
+                title = request.form.get('title')
+                # title = request.form['title']
                 title_description = request.form['title_description']
                 location = request.form['location']
                 salary = request.form['salary']
@@ -134,6 +135,30 @@ def create_jobs():
             abort(420, msg)
     except Exception as e:
         abort(500, e)
+
+@app.route('/user/apply_job', methods = ['POST'])
+def apply_job():
+    """User can use this api to apply for job"""
+    msg=''
+    try:
+        if session['loggedin']:
+            userId = session['id']      
+            if 'job_listing_id' in request.form and 'cover_letter' in request.form and 'resume' in request.files:
+                job_listing_id = request.form['job_listing_id']
+                cover_letter = request.form['cover_letter']
+                resume = request.files['resume']
+                user_id = userId
+                cur.execute('INSERT INTO jobapplication VALUES(NULL, %s, %s, %s, %s)', (user_id, job_listing_id, cover_letter, resume))
+                conn.commit()
+                msg = 'Application is sent successfully'
+                return render_template('index.html', msg = msg)
+            else:
+                abort(410)
+        else:
+            msg = 'Please Login'
+            return redirect(url_for('user_login'))
+    except Exception as e:
+        abort(500, e)         
 
 
 if __name__ == "__main__":
