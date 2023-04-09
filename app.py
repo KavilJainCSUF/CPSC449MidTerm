@@ -1,71 +1,88 @@
+
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 from functools import wraps
 import os
-from werkzeug.utils import secure_filename
 import re
 import jwt
-from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
-# from flask_restful import Api, Resource
-# from flask_swagger import swagger
-# from flask_swagger_ui import get_swaggerui_blueprint
 import pymysql
+from flask import Flask, jsonify, render_template, request
+from werkzeug.utils import secure_filename
 
+# Load environment variables from the .env file
+load_dotenv()
+
+# Initialize Flask app
 app = Flask(__name__)
 
-app.config['secret_key'] = 'midterm'
-app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024
+# Set Flask app configurations
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
 app.config['UPLOAD_EXTENSIONS'] = ['.pdf', '.docx']
 UPLOAD_PATH = 'uploaded_resume'
 app.config['UPLOAD_PATH'] = UPLOAD_PATH
+
+# Create the UPLOAD_PATH directory if it doesn't exist
 if not os.path.exists(UPLOAD_PATH):
     os.makedirs(UPLOAD_PATH)
 
-
+# Initialize database connection
 conn = pymysql.connect(
-    host='localhost',
-    user='root',
-    password='Kavil@514',
-    db='job_board',
+    host=os.environ['DB_HOST'],
+    user=os.environ['DB_USER'],
+    password=os.environ['DB_PASSWORD'],
+    db=os.environ['DB_NAME'],
     cursorclass=pymysql.cursors.DictCursor
 )
 
+# Create a cursor object to interact with the database
 cur = conn.cursor()
+
+@app.errorhandler(404)
+def page_not_found(error):
+    """Handle 404 error"""
+    return render_template('404.html'), 404
+
+@app.errorhandler(401)
+def unauthorized_user(error):
+    """Handle 401 error"""
+    return render_template('401.html'), 401
 
 
 def token_required(func):
+    """Require a valid JWT token to access a route"""
     @wraps(func)
     def decorated(*args, **kwargs):
         token = None
         if "Authorization" in request.headers:
             token = request.headers["Authorization"].split()[1]
         if not token:
-            return jsonify({'Alert!': 'Token is missing!'}), 401
+            return jsonify({'Alert!': 'Token is missing!'}), 400
         try:
             payload = jwt.decode(
-                token, app.config['secret_key'], algorithms=["HS256"])
+                token, app.config['SECRET_KEY'], algorithms=["HS256"])
             print(payload)
             cur.execute(
                 'SELECT * FROM USERS WHERE id=%s', (payload['id']))
             current_user = cur.fetchone()
             print(current_user)
             if current_user is None:
-                return jsonify({"Alert!": "Invalid Authorization Token"}), 402
+                return jsonify({"Alert!": "Invalid Authorization Token"}), 401
         except Exception as error:
-            print("{0}", error)
-            return jsonify({'Alert!': 'Something went wrong !'}), 500
+            return jsonify({'Error!': error}), 500
         return func(current_user, *args, **kwargs)
     return decorated
 
-
-
+# public route - home page
 @app.route('/')
-def index():
-    """Home Page"""
+def home():
+    """Render home page"""
     return render_template('index.html')
 
+# public route - user login
 @app.route('/user/login', methods=['GET', 'POST'])
 def user_login():
-    """User Login"""
+    """Handle user login"""
     msg = ''
     if request.method == 'POST' and 'email' in request.form and 'password' in request.form:
         email = request.form['email']
@@ -75,36 +92,38 @@ def user_login():
         conn.commit()
         user = cur.fetchone()
         if user:
+            # Generate a JWT token for the user
             token = jwt.encode({
                 'id': user['id'],
                 'expiration': str(datetime.utcnow() + timedelta(seconds=600))
-            }, app.config['secret_key'],
+            }, app.config['SECRET_KEY'],
                 algorithm="HS256")
             msg = 'Welcome {0} - {1} !'.format(user['name'], user['id'])
-            # return render_template('index.html', msg=msg)
-            return jsonify({'token': token})
+            return jsonify({'token': token}), 200
         else:
             msg = 'Incorrect email or password!'
     return render_template('login.html', msg=msg)
-
-
+    
+# private route - user logout
 @app.route('/user/logout', methods = ['POST'])
 @token_required
 def user_logout(current_user):
     """User Logout"""
-    print(current_user)
     return jsonify({'message': 'Logged out successfully.'}), 200
 
-
+# public route - User registration 
 @app.route('/user/register', methods=['POST'])
 def register_user():
-    """Register a user"""
+    """Endpoint for registering a user."""
     msg = ''
     if request.method == 'POST' and 'name' in request.form and 'email' in request.form and 'password' in request.form and 'is_employer' in request.form:
+        # Get user registration details from the form
         name = request.form['name']
         email = request.form['email']
         password = request.form['password']
         is_employer = request.form['is_employer']
+        
+        # Check if user with given email exists
         cur.execute('SELECT * from users WHERE email = %s', email)
         user = cur.fetchone()
         conn.commit()
@@ -119,35 +138,37 @@ def register_user():
         elif not re.match(r'^[01]+$', is_employer):
             msg = 'Press 1 if an employer or press 0.'
         else:
+            # Register user in the database
             cur.execute('INSERT INTO users VALUES (NULL, %s, %s, %s, %s)',
                         (name, email, password, is_employer))
             conn.commit()
             msg = 'You have registered Successfully!'
-            return render_template('login.html', msg=msg)
+            return jsonify({"Success!":msg}),200
     elif request.method == 'POST':
         msg = 'Please fill out the form!'
     return render_template('register.html', msg=msg)
 
 
+# public route 
 @app.route('/job_listings')
 def get_job_listings():
-    """List of available Jobs"""
+    """Endpoint for getting the list of available jobs."""
     try:
+        # Fetch available jobs from database
         cur.execute("SELECT * FROM JobListing")
         jobs = cur.fetchall()
         if jobs:
-            return jsonify(jobs)
+            return jsonify({"Success!":jobs}), 200
         else:
-            abort(404)
-    except Exception as e:
-        abort(500, e)
-
-
+            return jsonify({"Error!":"No jobs found"}), 402
+    except Exception as error:
+        return jsonify({"Error!":error}), 500
+        
+# rivate Route
 @app.route('/create_jobs', methods=['POST'])
 @token_required
 def create_jobs(current_user):
     """Here Employers create Jobs"""
-    msg = ''
     try:
         if current_user['is_employer'] == 1:
             employerId = current_user['id']
@@ -166,18 +187,18 @@ def create_jobs(current_user):
                 msg = 'Job is Successfully added'
                 return jsonify({ "message" : msg})
             else:
-                return jsonify({"Alert!":"Please fill the form"}), 401
+                return jsonify({"Alert!":"Please fill the form"}), 402
         else:
-            return jsonify({"Alert!":"You are not allowed to add a job"}), 402
-    except Exception as e:
-        abort(500, e)
+            return jsonify({"Alert!":"You are not allowed to add a job"}), 403
+    except Exception as error:
+        return jsonify({"Error!":error}), 500
 
 
+# private Route
 @app.route('/user/apply_job', methods=['POST'])
 @token_required
 def apply_job(current_user):
     """User can use this api to apply for job"""
-    msg = ''
     try:
         if current_user:
             userId = current_user['id']
@@ -189,22 +210,22 @@ def apply_job(current_user):
                 if filename != '':
                     file_ext = os.path.splitext(filename)[1]
                     if file_ext not in app.config['UPLOAD_EXTENSIONS']:
-                        abort(400)
+                        return jsonify({"Alert": "Please upload .pdf or .docx files only"}), 402
+                    if len(resume.read()) > app.config['MAX_CONTENT_LENGTH']:
+                        return jsonify({"Alert": "File too large. less than 2MB"}), 413
                     resume.save(os.path.join(
                         app.config['UPLOAD_PATH'], filename))
                 user_id = userId
                 cur.execute('INSERT INTO jobapplication VALUES(NULL, %s, %s, %s, %s)',
                             (user_id, job_listing_id, cover_letter, resume))
                 conn.commit()
-                msg = 'Application is sent successfully'
-                return render_template('index.html', msg=msg)
+                return jsonify({"Success!":"Application is sent successfully"}), 200
             else:
-                abort(410)
+                return jsonify({"Alert!":"Please enter the form details"}), 403
         else:
-            msg = 'Please Login'
-            return redirect(url_for('user_login'))
-    except Exception as e:
-        abort(500, e)
+            return jsonify({"Error!": "Please Login"}), 405
+    except Exception as error:
+        return jsonify({"Error": error}), 500
 
 
 if __name__ == "__main__":
