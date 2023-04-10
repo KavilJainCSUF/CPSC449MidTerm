@@ -7,6 +7,7 @@ import re
 import jwt
 import pymysql
 from flask import Flask, jsonify, render_template, request
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 # Load environment variables from the .env file
@@ -206,7 +207,7 @@ def apply_job(current_user):
                 job_listing_id = request.form['job_listing_id']
                 cover_letter = request.form['cover_letter']
                 resume = request.files['resume']
-                filename = secure_filename(resume.filename)
+                filename = secure_filename(resume.filename)    
                 if filename != '':
                     file_ext = os.path.splitext(filename)[1]
                     if file_ext not in app.config['UPLOAD_EXTENSIONS']:
@@ -224,8 +225,8 @@ def apply_job(current_user):
                 return jsonify({"Alert!":"Please enter the form details"}), 403
         else:
             return jsonify({"Error!": "Please Login"}), 405
-    except Exception as error:
-        return jsonify({"Error": error}), 500
+    except Exception or RequestEntityTooLarge as error:
+        return jsonify({"Error": str(error)}), 500
 
 
 if __name__ == "__main__":
