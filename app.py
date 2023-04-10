@@ -1,4 +1,3 @@
-
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from functools import wraps
@@ -49,7 +48,7 @@ def unauthorized_user(error):
     """Handle 401 error"""
     return render_template('401.html'), 401
 
-
+# Require a valid JWT token to access a route
 def token_required(func):
     """Require a valid JWT token to access a route"""
     @wraps(func)
@@ -62,11 +61,9 @@ def token_required(func):
         try:
             payload = jwt.decode(
                 token, app.config['SECRET_KEY'], algorithms=["HS256"])
-            print(payload)
             cur.execute(
                 'SELECT * FROM USERS WHERE id=%s', (payload['id']))
             current_user = cur.fetchone()
-            print(current_user)
             if current_user is None:
                 return jsonify({"Alert!": "Invalid Authorization Token"}), 401
         except Exception as error:
@@ -150,7 +147,7 @@ def register_user():
     return render_template('register.html', msg=msg)
 
 
-# public route 
+# public route - List of all available jobs
 @app.route('/job_listings')
 def get_job_listings():
     """Endpoint for getting the list of available jobs."""
@@ -163,9 +160,9 @@ def get_job_listings():
         else:
             return jsonify({"Error!":"No jobs found"}), 402
     except Exception as error:
-        return jsonify({"Error!":error}), 500
+        return jsonify({"Error!": str(error)}), 500
         
-# rivate Route
+# private Route - Emloyers create jobs using this endpoint
 @app.route('/create_jobs', methods=['POST'])
 @token_required
 def create_jobs(current_user):
@@ -192,10 +189,10 @@ def create_jobs(current_user):
         else:
             return jsonify({"Alert!":"You are not allowed to add a job"}), 403
     except Exception as error:
-        return jsonify({"Error!":error}), 500
+        return jsonify({"Error!": str(error)}), 500
 
 
-# private Route
+# private Route - users apply for jobs at this endpoint
 @app.route('/user/apply_job', methods=['POST'])
 @token_required
 def apply_job(current_user):
