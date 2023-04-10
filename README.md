@@ -10,7 +10,7 @@ Job Board is a platform that connects employers with job seekers.
 1. Python
 2. Flask
 3. MYSQL
-4. SWAGGER
+4. POSTMAN
 
 ## STEPS TO SETUP THE PROJECT
 

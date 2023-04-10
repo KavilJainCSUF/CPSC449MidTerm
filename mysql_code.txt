@@ -1,0 +1,36 @@
+use job_board;
+
+CREATE TABLE users (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  password VARCHAR(255) NOT NULL,
+  is_employer TINYINT(1) NOT NULL DEFAULT 0
+);
+
+CREATE TABLE JobListing (
+    id INT NOT NULL AUTO_INCREMENT,
+    company_name VARCHAR(255) NOT NULL,
+    company_description TEXT,
+    title VARCHAR(255) NOT NULL,
+    title_description TEXT,
+    location VARCHAR(255) NOT NULL,
+    salary DECIMAL(10,2) NOT NULL,
+    employer_id INT NOT NULL,
+    PRIMARY KEY (id),
+	FOREIGN KEY (employer_id) REFERENCES users(id)
+);
+
+CREATE TABLE JobApplication (
+    id INT NOT NULL AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    job_listing_id INT NOT NULL,
+    cover_letter TEXT,
+    resume TEXT,
+    PRIMARY KEY (id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (job_listing_id) REFERENCES JobListing(id)
+);
+
+
+ALTER TABLE jobapplication MODIFY resume TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
