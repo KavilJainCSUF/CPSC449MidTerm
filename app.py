@@ -57,7 +57,7 @@ def token_required(func):
         if "Authorization" in request.headers:
             token = request.headers["Authorization"].split()[1]
         if not token:
-            return jsonify({'Alert!': 'Token is missing!'}), 400
+            return jsonify({'Forbidden!': 'Token is missing!'}), 403
         try:
             payload = jwt.decode(
                 token, app.config['SECRET_KEY'], algorithms=["HS256"])
@@ -65,7 +65,7 @@ def token_required(func):
                 'SELECT * FROM USERS WHERE id=%s', (payload['id']))
             current_user = cur.fetchone()
             if current_user is None:
-                return jsonify({"Alert!": "Invalid Authorization Token"}), 401
+                return jsonify({"Invalid!": "Invalid Authorization Token or Expired"}), 498
         except Exception as error:
             return jsonify({'Error!': error}), 500
         return func(current_user, *args, **kwargs)
@@ -158,7 +158,7 @@ def get_job_listings():
         if jobs:
             return jsonify({"Success!":jobs}), 200
         else:
-            return jsonify({"Error!":"No jobs found"}), 402
+            return jsonify({"Alert!":"No jobs found"}), 403
     except Exception as error:
         return jsonify({"Error!": str(error)}), 500
         
@@ -185,9 +185,9 @@ def create_jobs(current_user):
                 msg = 'Job is Successfully added'
                 return jsonify({ "message" : msg})
             else:
-                return jsonify({"Alert!":"Please fill the form"}), 402
+                return jsonify({"Alert!":"Please fill the form"}), 403
         else:
-            return jsonify({"Alert!":"You are not allowed to add a job"}), 403
+            return jsonify({"Unauthorized!":"You are not allowed to add a job"}), 401
     except Exception as error:
         return jsonify({"Error!": str(error)}), 500
 
@@ -219,9 +219,9 @@ def apply_job(current_user):
                 conn.commit()
                 return jsonify({"Success!":"Application is sent successfully"}), 200
             else:
-                return jsonify({"Alert!":"Please enter the form details"}), 403
+                return jsonify({"Forbidden!":"Please enter the form details"}), 403
         else:
-            return jsonify({"Error!": "Please Login"}), 405
+            return jsonify({"Unauthorized!": "Cannot apply for this job"}), 405
     except Exception or RequestEntityTooLarge as error:
         return jsonify({"Error": str(error)}), 500
 
