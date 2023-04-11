@@ -77,6 +77,58 @@ def home():
     """Render home page"""
     return render_template('index.html')
 
+# public route - User registration 
+@app.route('/user/register', methods=['POST'])
+def register_user():
+    """Endpoint for registering a user."""
+    msg = ''
+    if request.method == 'POST' and 'name' in request.form and 'email' in request.form and 'password' in request.form and 'is_employer' in request.form:
+        # Get user registration details from the form
+        name = request.form['name']
+        email = request.form['email']
+        password = request.form['password']
+        is_employer = request.form['is_employer']
+        
+        # Check if user with given email exists
+        cur.execute('SELECT * from users WHERE email = %s', email)
+        user = cur.fetchone()
+        conn.commit()
+        if user:
+            return jsonify({'Conflict!':'Account Already Exists!'}), 409
+        elif not re.match(r'^[a-zA-Z]{4,19}$', name):
+            return jsonify({'Bad Request': 'Invalid Name. It should be at least 4 characters long and less than 19 characters'}), 400
+        elif not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+            return jsonify({'Bad Request': 'Invalid Email'}), 400
+        elif not re.match(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$', password):
+            return jsonify({'Bad Request': 'Invalid Password. Password must be at least 8 characters long, contain at least one uppercase letter, contain at least one lowercase letter, at least one digit, contains at least one Special Characters(@$!%*?&)'}), 400
+        elif not re.match(r'^[01]+$', is_employer):
+            return jsonify({'Bad Request': 'Invalid entry, enter 1 if employer else 0'}), 400
+        else:
+            # Register user in the database
+            cur.execute('INSERT INTO users VALUES (NULL, %s, %s, %s, %s)',
+                        (name, email, password, is_employer))
+            conn.commit()
+            msg = 'You have registered Successfully!'
+            return jsonify({"Success!":msg}),200
+    elif request.method == 'POST':
+        return jsonify({'Bad Request': 'Please fill out the form!'}), 400
+    return render_template('register.html', msg=msg)
+
+# public route - List of all available jobs
+@app.route('/job_listings')
+def get_job_listings():
+    """Endpoint for getting the list of available jobs."""
+    try:
+        # Fetch available jobs from database
+        cur.execute("SELECT * FROM JobListing")
+        jobs = cur.fetchall()
+        if jobs:
+            return jsonify({"Success!":jobs}), 200
+        else:
+            return jsonify({"Alert!":"No jobs found"}), 403
+    except Exception as error:
+        return jsonify({"Error!": str(error)}), 500
+
 # public route - user login
 @app.route('/user/login', methods=['GET', 'POST'])
 def user_login():
@@ -99,68 +151,9 @@ def user_login():
             msg = 'Welcome {0} - {1} !'.format(user['name'], user['id'])
             return jsonify({'token': token}), 200
         else:
-            msg = 'Incorrect email or password!'
+            return jsonify({'Bad Request': 'Incorrect email or password!'}), 403
     return render_template('login.html', msg=msg)
     
-# private route - user logout
-@app.route('/user/logout', methods = ['POST'])
-@token_required
-def user_logout(current_user):
-    """User Logout"""
-    return jsonify({'message': 'Logged out successfully.'}), 200
-
-# public route - User registration 
-@app.route('/user/register', methods=['POST'])
-def register_user():
-    """Endpoint for registering a user."""
-    msg = ''
-    if request.method == 'POST' and 'name' in request.form and 'email' in request.form and 'password' in request.form and 'is_employer' in request.form:
-        # Get user registration details from the form
-        name = request.form['name']
-        email = request.form['email']
-        password = request.form['password']
-        is_employer = request.form['is_employer']
-        
-        # Check if user with given email exists
-        cur.execute('SELECT * from users WHERE email = %s', email)
-        user = cur.fetchone()
-        conn.commit()
-        if user:
-            msg = 'Account Already Exists!'
-        elif not re.match(r'^[a-zA-Z]{4,19}$', name):
-            msg = 'Invalid Name. It should be at least 4 characters long and less than 19 characters.'
-        elif not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
-            msg = 'Invalid Email Address'
-        elif not re.match(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$', password):
-            msg = 'Invalid Password. Password must be at least 8 characters long, contain at least one uppercase letter, contain at least one lowercase letter, at least one digit, can contain Special Characters(@$!%*?&)'
-        elif not re.match(r'^[01]+$', is_employer):
-            msg = 'Press 1 if an employer or press 0.'
-        else:
-            # Register user in the database
-            cur.execute('INSERT INTO users VALUES (NULL, %s, %s, %s, %s)',
-                        (name, email, password, is_employer))
-            conn.commit()
-            msg = 'You have registered Successfully!'
-            return jsonify({"Success!":msg}),200
-    elif request.method == 'POST':
-        msg = 'Please fill out the form!'
-    return render_template('register.html', msg=msg)
-
-
-# public route - List of all available jobs
-@app.route('/job_listings')
-def get_job_listings():
-    """Endpoint for getting the list of available jobs."""
-    try:
-        # Fetch available jobs from database
-        cur.execute("SELECT * FROM JobListing")
-        jobs = cur.fetchall()
-        if jobs:
-            return jsonify({"Success!":jobs}), 200
-        else:
-            return jsonify({"Alert!":"No jobs found"}), 403
-    except Exception as error:
-        return jsonify({"Error!": str(error)}), 500
         
 # private Route - Emloyers create jobs using this endpoint
 @app.route('/create_jobs', methods=['POST'])
@@ -183,9 +176,9 @@ def create_jobs(current_user):
                     company_name, company_description, title, title_description, location, salary, employer_id))
                 conn.commit()
                 msg = 'Job is Successfully added'
-                return jsonify({ "message" : msg})
+                return jsonify({ "message" : msg}), 200
             else:
-                return jsonify({"Alert!":"Please fill the form"}), 403
+                return jsonify({"Bad Request!":"Please fill the form"}), 409
         else:
             return jsonify({"Unauthorized!":"You are not allowed to add a job"}), 401
     except Exception as error:
@@ -208,7 +201,7 @@ def apply_job(current_user):
                 if filename != '':
                     file_ext = os.path.splitext(filename)[1]
                     if file_ext not in app.config['UPLOAD_EXTENSIONS']:
-                        return jsonify({"Alert": "Please upload .pdf or .docx files only"}), 402
+                        return jsonify({"Bad Request": "Please upload .pdf or .docx files only"}), 403
                     if len(resume.read()) > app.config['MAX_CONTENT_LENGTH']:
                         return jsonify({"Alert": "File too large. less than 2MB"}), 413
                     resume.save(os.path.join(
@@ -219,12 +212,19 @@ def apply_job(current_user):
                 conn.commit()
                 return jsonify({"Success!":"Application is sent successfully"}), 200
             else:
-                return jsonify({"Forbidden!":"Please enter the form details"}), 403
+                return jsonify({"Bad Request!":"Please enter the form details"}), 403
         else:
             return jsonify({"Unauthorized!": "Cannot apply for this job"}), 405
     except Exception or RequestEntityTooLarge as error:
         return jsonify({"Error": str(error)}), 500
 
+
+# private route - user logout
+@app.route('/user/logout', methods = ['POST'])
+@token_required
+def user_logout(current_user):
+    """User Logout"""
+    return jsonify({'message': 'Logged out successfully.'}), 200
 
 if __name__ == "__main__":
     app.run(host="localhost", port=int("5000"))
