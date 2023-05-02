@@ -1,13 +1,17 @@
+import base64
 from datetime import datetime, timedelta
+from io import BytesIO
 from dotenv import load_dotenv
 from functools import wraps
 import os
 import re
 import jwt
 import pymysql
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, make_response, render_template, request, send_file
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
+from flask_cors import CORS
+
 
 # Load environment variables from the .env file
 load_dotenv()
@@ -15,12 +19,18 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 
+cors = CORS(app, resources={r"/*": {"origins": "*"}})
+
 # Set Flask app configurations
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
-app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
+app.config['VIDEO_MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 app.config['UPLOAD_EXTENSIONS'] = ['.pdf', '.docx']
 UPLOAD_PATH = 'uploaded_resume'
 app.config['UPLOAD_PATH'] = UPLOAD_PATH
+app.config['VIDEO_UPLOAD_EXTENSIONS'] = ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.mkv', '.webm', '.m4v', '.3gp']
+VIDEO_UPLOAD_PATH = 'uploaded_video'
+app.config['VIDEO_UPLOAD_PATH'] = VIDEO_UPLOAD_PATH
 
 # Create the UPLOAD_PATH directory if it doesn't exist
 if not os.path.exists(UPLOAD_PATH):
@@ -109,7 +119,7 @@ def register_user():
                         (name, email, password, is_employer))
             conn.commit()
             msg = 'You have registered Successfully!'
-            return jsonify({"Success!":msg}),200
+            return jsonify({"Success":msg}),200
     elif request.method == 'POST':
         return jsonify({'Bad Request': 'Please fill out the form!'}), 400
     return render_template('register.html', msg=msg)
@@ -193,11 +203,16 @@ def apply_job(current_user):
     try:
         if current_user:
             userId = current_user['id']
-            if 'job_listing_id' in request.form and 'cover_letter' in request.form and 'resume' in request.files:
+            print("HELLO")
+            if 'job_listing_id' in request.form and 'resume' in request.files and 'video' in request.files:
                 job_listing_id = request.form['job_listing_id']
-                cover_letter = request.form['cover_letter']
                 resume = request.files['resume']
-                filename = secure_filename(resume.filename)    
+                video = request.files['video']
+                filename = secure_filename(resume.filename)
+                video_file = secure_filename(video.filename)
+                resume.save()
+                video.save()
+                print("I am here")
                 if filename != '':
                     file_ext = os.path.splitext(filename)[1]
                     if file_ext not in app.config['UPLOAD_EXTENSIONS']:
@@ -206,16 +221,24 @@ def apply_job(current_user):
                         return jsonify({"Alert": "File too large. less than 2MB"}), 413
                     resume.save(os.path.join(
                         app.config['UPLOAD_PATH'], filename))
+                if video_file != '':
+                    file_ext = os.path.splitext(video_file)[1]
+                    if file_ext not in app.config['VIDEO_UPLOAD_EXTENSIONS']:
+                        return jsonify({"Bad Request": "Please upload .mp4 .avi .mov .wmv .flv .mkv .webm .m4v .3gp files only"}), 403
+                    if len(video.read()) > app.config['VIDEO_MAX_CONTENT_LENGTH']:
+                        return jsonify({"Alert": "File too large. less than 500MB"}), 413
+                    video.save(os.path.join(
+                        app.config['VIDEO_UPLOAD_PATH'], video_file))
                 user_id = userId
-                cur.execute('INSERT INTO jobapplication VALUES(NULL, %s, %s, %s, %s)',
-                            (user_id, job_listing_id, cover_letter, resume))
+                cur.execute('INSERT INTO jobapplication VALUES(NULL, %s, %s, %s, %s, %s, %s)',
+                            (user_id, job_listing_id, resume, resume.read(), video, video.read()))
                 conn.commit()
                 return jsonify({"Success!":"Application is sent successfully"}), 200
             else:
                 return jsonify({"Bad Request!":"Please enter the form details"}), 403
         else:
             return jsonify({"Unauthorized!": "Cannot apply for this job"}), 405
-    except Exception or RequestEntityTooLarge as error:
+    except Exception as error:
         return jsonify({"Error": str(error)}), 500
 
 
@@ -226,5 +249,40 @@ def user_logout(current_user):
     """User Logout"""
     return jsonify({'message': 'Logged out successfully.'}), 200
 
+@app.route('/user/get_video', methods = ['GET'])
+@token_required
+def get_video(current_user):
+    """Video of User"""
+    try:
+        if current_user:
+            user_id = current_user['id']
+            print(user_id)
+            cur.execute('SELECT video from Jobapplication WHERE user_id = %s', user_id)
+            video_data = cur.fetchone()['video']
+            return Response(video_data,  mimetype = 'video/avi')
+        else:
+            return jsonify({"Error": "User not found"}), 400
+    except Exception as error:
+        return jsonify({"Error": str(error)}), 500
+
+@app.route('/user/get_resume', methods = ['GET'])
+@token_required
+def get_resume(current_user):
+    """Resume of User"""
+    try:
+        if current_user:
+            user_id = current_user['id']
+            print(user_id)
+            cur.execute('SELECT resume_data from Jobapplication WHERE user_id = %s', user_id)
+            for x in cur.fetchall():
+                data_v = x
+                break
+            return send_file(BytesIO(data_v), download_name='resume.pdf', as_attachment=True)
+        else:
+            return jsonify({"Error": "User not found"}), 400
+    except Exception as error:
+        return jsonify({"Error": str(error)}), 500
+
+
 if __name__ == "__main__":
-    app.run(host="localhost", port=int("5000"))
+    app.run(host='0.0.0.0', debug=True, port=8080)
