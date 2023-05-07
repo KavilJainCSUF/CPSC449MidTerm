@@ -139,7 +139,9 @@ def get_job_listings():
                 return jsonify({"Success!":jobs}), 200
             else:
                 print("I am called")
-                filtered_jobs = [job for job in jobs if job.get(column_name) == value]
+                cur.execute("SELECT * FROM JobListing WHERE {} LIKE %s".format(column_name), ('%' + value + '%',))
+                filtered_jobs = cur.fetchall()
+                # filtered_jobs = [job for job in jobs if job.get(column_name) == value]
                 return jsonify({"Success!":filtered_jobs}), 200
         else:
             return jsonify({"Alert!":"No jobs found"}), 403
