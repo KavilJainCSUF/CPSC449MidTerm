@@ -128,16 +128,23 @@ def register_user():
 @app.route('/job_listings')
 def get_job_listings():
     """Endpoint for getting the list of available jobs."""
+    column_name = request.args.get('column_name')
+    value = request.args.get('value')
     try:
         # Fetch available jobs from database
         cur.execute("SELECT * FROM JobListing")
         jobs = cur.fetchall()
         if jobs:
-            return jsonify({"Success!":jobs}), 200
+            if column_name is None or value is None:
+                return jsonify({"Success!":jobs}), 200
+            else:
+                print("I am called")
+                filtered_jobs = [job for job in jobs if job.get(column_name) == value]
+                return jsonify({"Success!":filtered_jobs}), 200
         else:
             return jsonify({"Alert!":"No jobs found"}), 403
     except Exception as error:
-        return jsonify({"Error!": str(error)}), 500
+        return jsonify({"Error!": str(error)}), 500    
 
 # public route - user login
 @app.route('/user/login', methods=['GET', 'POST'])
